@@ -4,4 +4,5 @@ venv/
 *cache
 .DS_store
 .idea
+__pycache__
 
