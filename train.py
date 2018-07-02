@@ -30,7 +30,7 @@ def train(embed_size: int, batch_size: int, epochs: int) -> None:
         validation_data=[dataset.x_test, dataset.y_test],
         callbacks=[
             ks.callbacks.ModelCheckpoint(
-                filepath='model.h5',
+                filepath=utils.get_filename(embed_size),
                 monitor='loss',
                 save_best_only=True,
                 save_weights_only=True,
@@ -47,8 +47,8 @@ if __name__ == '__main__':
                         help='Number of epochs for which to fit the model')
     parser.add_argument('-b', '--batch-size', type=int, default=32,
                         help='Batch size for training the network')
-
     args = parser.parse_args()
+
     train(
         embed_size=args.embedding_size,
         batch_size=args.batch_size,

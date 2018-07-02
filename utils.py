@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
-from typing import List, Tuple, TypeVar
+from typing import List, Tuple
 
+import numpy as np
+from numpy import ndarray as Matrix  # For typing
 from tensorflow import keras as ks
 
 # Defines some types that are used in various places.
-Matrix = TypeVar('Matrix')
 DataPair = Tuple[Tuple[Matrix, Matrix], Tuple[Matrix, Matrix]]
+
+
+def get_filename(embed_size: int) -> str:
+    return 'model_{}_embed.h5'.format(embed_size)
 
 
 def build_model(sequence_len: int,
@@ -15,9 +20,8 @@ def build_model(sequence_len: int,
     i = ks.layers.Input(shape=(sequence_len,))
     x = ks.layers.Embedding(vocab_size, embed_size, name='embeddings')(i)
     x = ks.layers.Conv1D(1000, 3, name='convs')(x)
-    x = ks.layers.Activation('relu')(x)
     x = ks.layers.GlobalAveragePooling1D()(x)
-    x = ks.layers.Dense(1)(x)
+    x = ks.layers.Dense(1, name='output')(x)
     x = ks.layers.Activation('sigmoid')(x)
     return ks.models.Model(inputs=[i], outputs=[x])
 
@@ -28,8 +32,8 @@ class Dataset(object):
         self.index_to_word = {v: k for k, v in self.word_to_index.items()}
         self.sequence_len = sequence_len
 
-    def decode(self, x: List[int]) -> str:
-        return ' '.join(self.index_to_word.get(i - 3, 'X') for i in x[1:])
+    def decode(self, x: List[int]) -> List[str]:
+        return [self.index_to_word.get(i - 3, 'X') for i in x[1:]]
 
     def encode(self, x: str) -> List[int]:
         return [1] + [
@@ -65,7 +69,7 @@ class Dataset(object):
     def vocab_size(self) -> int:
         if not hasattr(self, '_vocab_size'):
             self._vocab_size = max(
-                self.x_train.max(), self.y_train.max(),
-                self.x_test.max(), self.y_test.max(),
+                np.max(self.x_train), np.max(self.y_train),
+                np.max(self.x_test), np.max(self.y_test),
             )
         return self._vocab_size
