@@ -14,12 +14,11 @@ def build_model(sequence_len: int,
                 embed_size: int) -> ks.models.Model:
     i = ks.layers.Input(shape=(sequence_len,))
     x = ks.layers.Embedding(vocab_size, embed_size, name='embeddings')(i)
-    x = ks.layers.Conv1D(1000, 3, name='convs', use_bias=False)(x)
-    x = ks.layers.Activation('relu')
-    x = ks.layers.BatchNormalization(name='batch_norm')(x)
+    x = ks.layers.Conv1D(1000, 3, name='convs')(x)
+    x = ks.layers.Activation('relu')(x)
     x = ks.layers.GlobalAveragePooling1D()(x)
     x = ks.layers.Dense(1)(x)
-    x = ks.layers.Activation('relu')
+    x = ks.layers.Activation('sigmoid')(x)
     return ks.models.Model(inputs=[i], outputs=[x])
 
 
