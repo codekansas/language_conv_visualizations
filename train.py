@@ -31,7 +31,7 @@ def train(embed_size: int, batch_size: int, epochs: int) -> None:
         callbacks=[
             ks.callbacks.ModelCheckpoint(
                 filepath=utils.get_filename(embed_size),
-                monitor='loss',
+                monitor='val_loss',
                 save_best_only=True,
                 save_weights_only=True,
             ),
