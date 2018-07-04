@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+from typing import Tuple, List, Any
 
 from annoy import AnnoyIndex
 from matplotlib import pyplot as plt
@@ -10,8 +11,59 @@ import numpy as np
 from sklearn.decomposition import PCA
 from tensorflow import keras as ks
 
-import utils
-from utils import (Dataset, Matrix)  # Types
+from utils import Dataset, Matrix  # Project-specific types
+
+
+def save_json(obj: Any, save_loc: str, fname: str) -> None:
+    json.dump(obj, open(os.path.join(save_loc, fname), 'w'))
+
+
+def load_json(save_loc: str, fname: str) -> Any:
+    return json.load(open(os.path.join(save_loc, fname), 'r'))
+
+
+def get_ordered_sentences(words: List[str],
+                          scores: List[float],
+                          conv_len: int) -> List[Tuple[str, float]]:
+    assert len(scores) + conv_len - 1 == len(words)
+    sentence_score_pairs = [
+        (' '.join(words[i:i + conv_len]), scores[i])
+        for i in range(len(scores))
+    ]
+    sentence_score_pairs.sort(key=lambda x: x[1])  # Sorts by scores.
+    return sentence_score_pairs
+
+
+def make_examples(save_loc: str) -> None:
+    word_preds = load_json(save_loc, 'word_predictions.json')
+    conv_len = word_preds['conv_len']
+    word_preds = word_preds['predictions']
+    with open(os.path.join(save_loc, 'word_predictions_show.txt'), 'w') as f:
+        for example in word_preds:
+            ordered_sentences = get_ordered_sentences(
+                example['words'],
+                example['preds'],
+                conv_len,
+            )
+            f.write('\n'.join('{}: {}'.format(*g)
+                    for g in ordered_sentences))
+            f.write('\n\n')
+
+    excitations = load_json(save_loc, 'excitations.json')
+    conv_len = excitations['conv_len']
+    excitations = excitations['activations']
+    with open(os.path.join(save_loc, 'excitations_show.txt'), 'w') as f:
+        for example in excitations:
+            for i in range(3):
+                ordered_sentences = get_ordered_sentences(
+                    example['words'],
+                    example['preds'][i],
+                    conv_len,
+                )
+                f.write('Layer {}\n'.format(i))
+                f.write('\n'.join('{}: {}'.format(*g)
+                        for g in ordered_sentences))
+                f.write('\n\n')
 
 
 def get_word_predictions(model: ks.models.Model,
@@ -76,8 +128,7 @@ def get_index(embeddings: Matrix,
               num_trees: int,
               cache: bool) -> AnnoyIndex:
     embedding_size = np.shape(embeddings)[1]
-    fname = 'embeddings_{}_dim_{}_trees.ann'.format(
-        embedding_size, num_trees)
+    fname = 'embeddings.ann'
     index = AnnoyIndex(embedding_size)
     if cache and os.path.exists(fname):
         index.load(fname)
@@ -116,6 +167,7 @@ def histograms(embeddings: Matrix, convs: Matrix, save_loc: str) -> None:
         plt.xlabel('Value of weight')
         plt.ylabel('Count')
         i += 1
+    plt.tight_layout()
     plt.savefig(os.path.join(save_loc, 'histograms.png'))
     plt.close()
 
@@ -147,29 +199,22 @@ def conv_knn(embeddings: Matrix,
     ], open(os.path.join(save_loc, 'knns.json'), 'w'), indent=2)
 
 
-def visualize(embed_size: int,
-              num_nns: int,
+def visualize(num_nns: int,
               num_trees: int,
               save_loc: str,
               cache_index: bool,
-              num_sentences: int) -> None:
-    fname = utils.get_filename(embed_size)
-    if not os.path.exists(fname):
+              num_sentences: int,
+              model_save_loc: str) -> None:
+    if not os.path.exists(model_save_loc):
         raise RuntimeError('No such trained model exists: "{}". Run the '
-                           'training script again, specifying embedding '
-                           'size of {}.'.format(fname, embed_size))
+                           'training script first!'.format(model_save_loc))
 
     if not os.path.exists(save_loc):
         os.makedirs(save_loc)
 
     dataset = Dataset()
 
-    model = utils.build_model(
-        sequence_len=dataset.sequence_len,
-        vocab_size=dataset.vocab_size,
-        embed_size=embed_size,
-    )
-    model.load_weights(fname)
+    model = ks.models.load_model(model_save_loc)
 
     embeddings = model.get_layer('embeddings').get_weights()[0]
     convs = model.get_layer('convs').get_weights()[0]
@@ -195,29 +240,33 @@ def visualize(embed_size: int,
     print('Computing convolutional excitation for sample sentences')
     get_excitations(model, num_sentences, dataset, save_loc)
 
+    # Get some examples.
+    print('Converting JSON to text examples')
+    make_examples(save_loc)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Visualize trained network')
-    parser.add_argument('-t', '--num-trees', type=int, default=10,
+    parser.add_argument('-t', '--num-trees', type=int, default=100,
                         help='Number of trees to use in KNN model')
     parser.add_argument('-n', '--num-neighbors', type=int, default=10,
                         help='Number of neighbors to return in KNN search')
-    parser.add_argument('-e', '--embedding-size', type=int, default=128,
-                        help='Number of dimensions in word embeddings')
     parser.add_argument('-o', '--save-loc', type=str, default='outputs/',
                         help='Where to save the visualization files')
-    parser.add_argument('-c', '--cache-index', default=False,
-                        action='store_true',
+    parser.add_argument('--no-cache-index', default=True,
+                        action='store_false',
                         help='If set, caches the index lookup')
     parser.add_argument('-s', '--num-sentences', type=int, default=10,
                         help='Number of example sentences to visualize')
+    parser.add_argument('-m', '--model-save-loc', type=str, default='model.h5',
+                        help='Where the trained model is saved')
     args = parser.parse_args()
 
     visualize(
-        embed_size=args.embedding_size,
         num_nns=args.num_neighbors,
         num_trees=args.num_trees,
         save_loc=args.save_loc,
-        cache_index=args.cache_index,
+        cache_index=not args.no_cache_index,
         num_sentences=args.num_sentences,
+        model_save_loc=args.model_save_loc,
     )
