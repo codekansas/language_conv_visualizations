@@ -4,6 +4,7 @@ from typing import List, Tuple
 
 import numpy as np
 from numpy import ndarray as Matrix  # For typing
+import tensorflow as tf
 from tensorflow import keras as ks
 
 # Defines some types that are used in various places.
@@ -18,10 +19,18 @@ def build_model(sequence_len: int,
                 vocab_size: int,
                 embed_size: int) -> ks.models.Model:
     i = ks.layers.Input(shape=(sequence_len,))
-    x = ks.layers.Embedding(vocab_size, embed_size, name='embeddings')(i)
-    x = ks.layers.Conv1D(1000, 3, name='convs')(x)
+    x = ks.layers.Embedding(
+        vocab_size,
+        embed_size,
+        embeddings_initializer=ks.initializers.RandomNormal(stddev=0.05),
+        name='embeddings',
+    )(i)
+    x = ks.layers.Conv1D(100, 3, name='convs')(x)
+    x = ks.layers.Lambda(
+        lambda t: tf.reduce_sum(t, axis=2, keepdims=True),
+        name='word_preds',
+    )(x)
     x = ks.layers.GlobalAveragePooling1D()(x)
-    x = ks.layers.Dense(1, name='output')(x)
     x = ks.layers.Activation('sigmoid')(x)
     return ks.models.Model(inputs=[i], outputs=[x])
 
@@ -71,5 +80,5 @@ class Dataset(object):
             self._vocab_size = max(
                 np.max(self.x_train), np.max(self.y_train),
                 np.max(self.x_test), np.max(self.y_test),
-            )
+            ) + 1
         return self._vocab_size
