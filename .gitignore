@@ -8,5 +8,7 @@ __pycache__
 *.h5
 *.ann
 *.json
+
 outputs/
+web/
 

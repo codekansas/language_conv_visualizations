@@ -7,12 +7,11 @@ from tensorflow import keras as ks
 import utils
 
 
-def build_model(sequence_len: int,
-                vocab_size: int,
+def build_model(vocab_size: int,
                 embed_size: int,
                 num_convolutions: int,
                 conv_length: int) -> ks.models.Model:
-    i = ks.layers.Input(shape=(sequence_len,))
+    i = ks.layers.Input(shape=(None,))
 
     # The initializer is set so that the relative magnitude of the embeddings
     # are close to the relative magnitude of the convolutioanl filters, which
@@ -29,16 +28,15 @@ def build_model(sequence_len: int,
     x = ks.layers.Conv1D(
         num_convolutions, 3,
         kernel_initializer=ks.initializers.RandomNormal(stddev=0.05),
-        activity_regularizer=ks.regularizers.l2(0.001),
+        padding='same',
         use_bias=False,
-        # activation='relu',
+        activation='relu',
         name='convs',
     )(x)
     x = ks.layers.BatchNormalization()(x)
 
     x = ks.layers.Conv1D(
         1, 1,
-        use_bias=False,
         activation='sigmoid',
         name='word_preds',
     )(x)
@@ -55,7 +53,6 @@ def train(embed_size: int,
     dataset = utils.Dataset()
 
     model = build_model(
-        sequence_len=dataset.sequence_len,
         vocab_size=dataset.vocab_size,
         embed_size=embed_size,
         num_convolutions=num_convolutions,
@@ -94,7 +91,7 @@ if __name__ == '__main__':
                         help='Number of epochs for which to fit the model')
     parser.add_argument('-b', '--batch-size', type=int, default=32,
                         help='Batch size for training the network')
-    parser.add_argument('-c', '--num-convolutions', type=int, default=32,
+    parser.add_argument('-c', '--num-convolutions', type=int, default=128,
                         help='Number of convolutional filters')
     parser.add_argument('-l', '--conv-length', type=int, default=3,
                         help='The length of the convolutional filters')

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-from typing import List, Tuple
+import json
+import os
+from typing import List, Tuple, Any
 
 import numpy as np
 from numpy import ndarray as Matrix  # For typing
@@ -10,11 +12,25 @@ from tensorflow import keras as ks
 DataPair = Tuple[Tuple[Matrix, Matrix], Tuple[Matrix, Matrix]]
 
 
+def save_json(obj: Any, save_loc: str, fname: str) -> None:
+    json.dump(obj, open(os.path.join(save_loc, fname), 'w'), indent=2)
+
+
+def load_json(save_loc: str, fname: str) -> Any:
+    return json.load(open(os.path.join(save_loc, fname), 'r'))
+
+
 class Dataset(object):
-    def __init__(self, sequence_len: int=400) -> None:
+    def __init__(self, sequence_len: int=400, vocab_size: int=20000) -> None:
         self.word_to_index = ks.datasets.imdb.get_word_index()
+        self.word_to_index = {
+            k: v
+            for k, v in self.word_to_index.items()
+            if v < vocab_size - 3
+        }
         self.index_to_word = {v: k for k, v in self.word_to_index.items()}
         self.sequence_len = sequence_len
+        self.vocab_size = vocab_size
 
     def decode(self, x: List[int]) -> List[str]:
         return [self.index_to_word.get(i - 3, 'X') for i in x[1:]]
@@ -30,7 +46,7 @@ class Dataset(object):
         if not hasattr(self, '_x_train'):
             (x_train, y_train), (x_test, y_test) = ks.datasets.imdb.load_data(
                 # maxlen=self.sequence_len,
-                num_words=20000,
+                num_words=self.vocab_size,
             )
             x_train = ks.preprocessing.sequence.pad_sequences(
                 x_train, maxlen=self.sequence_len)
@@ -51,12 +67,3 @@ class Dataset(object):
 
     @property
     def y_test(self) -> Matrix: return self.data[1][1]
-
-    @property
-    def vocab_size(self) -> int:
-        if not hasattr(self, '_vocab_size'):
-            self._vocab_size = max(
-                np.max(self.x_train), np.max(self.y_train),
-                np.max(self.x_test), np.max(self.y_test),
-            ) + 1
-        return self._vocab_size

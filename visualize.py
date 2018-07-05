@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse
-import json
 import os
-from typing import Tuple, List, Any
+from typing import Tuple, List
 
 from annoy import AnnoyIndex
 from matplotlib import pyplot as plt
@@ -11,15 +10,8 @@ import numpy as np
 from sklearn.decomposition import PCA
 from tensorflow import keras as ks
 
+import utils
 from utils import Dataset, Matrix  # Project-specific types
-
-
-def save_json(obj: Any, save_loc: str, fname: str) -> None:
-    json.dump(obj, open(os.path.join(save_loc, fname), 'w'))
-
-
-def load_json(save_loc: str, fname: str) -> Any:
-    return json.load(open(os.path.join(save_loc, fname), 'r'))
 
 
 def get_ordered_sentences(words: List[str],
@@ -35,7 +27,7 @@ def get_ordered_sentences(words: List[str],
 
 
 def make_examples(save_loc: str) -> None:
-    word_preds = load_json(save_loc, 'word_predictions.json')
+    word_preds = utils.load_json(save_loc, 'word_predictions.json')
     conv_len = word_preds['conv_len']
     word_preds = word_preds['predictions']
     with open(os.path.join(save_loc, 'word_predictions_show.txt'), 'w') as f:
@@ -49,7 +41,7 @@ def make_examples(save_loc: str) -> None:
                     for g in ordered_sentences))
             f.write('\n\n')
 
-    excitations = load_json(save_loc, 'excitations.json')
+    excitations = utils.load_json(save_loc, 'excitations.json')
     conv_len = excitations['conv_len']
     excitations = excitations['activations']
     with open(os.path.join(save_loc, 'excitations_show.txt'), 'w') as f:
@@ -86,13 +78,13 @@ def get_word_predictions(model: ks.models.Model,
             'preds': [float(i) for i in preds],
         }
 
-    json.dump({
+    utils.save_json({
         'conv_len': conv_len,
         'predictions': [
             get_preds(i, p)
             for i, p in zip(dataset.x_train[:num_sentences], preds)
         ],
-    }, open(os.path.join(save_loc, 'word_predictions.json'), 'w'), indent=2)
+    }, save_loc, 'word_predictions.json')
 
 
 def get_excitations(model: ks.models.Model,
@@ -115,13 +107,13 @@ def get_excitations(model: ks.models.Model,
             'preds': [[float(j) for j in i] for i in preds.T],
         }
 
-    json.dump({
+    utils.save_json({
         'conv_len': conv_len,
         'activations': [
             get_preds(i, p)
             for i, p in zip(dataset.x_train[:num_sentences], preds)
         ],
-    }, open(os.path.join(save_loc, 'excitations.json'), 'w'), indent=2)
+    }, save_loc, 'excitations.json')
 
 
 def get_index(embeddings: Matrix,
@@ -193,10 +185,10 @@ def conv_knn(embeddings: Matrix,
             'norm': float(np.sqrt(np.sum(v ** 2))),
         }
 
-    json.dump([
+    utils.save_json([
         [parse_vec(i, j) for i in range(convs.shape[0])]
         for j in range(convs.shape[1])
-    ], open(os.path.join(save_loc, 'knns.json'), 'w'), indent=2)
+    ], save_loc, 'knns.json')
 
 
 def visualize(num_nns: int,
@@ -219,28 +211,22 @@ def visualize(num_nns: int,
     embeddings = model.get_layer('embeddings').get_weights()[0]
     convs = model.get_layer('convs').get_weights()[0]
 
-    # Computes convolutional nearest neighbors.
     print('Computing KNNs to convolutions')
     conv_knn(embeddings, convs, dataset, num_trees,
              num_nns, save_loc, cache_index)
 
-    # Plots dimensionality reduction.
     print('Plotting dimensionality reduction on embeddings and convolutions')
     dimensionality_reduction(embeddings, convs, save_loc)
 
-    # Plots histograms of the weight values.
     print('Plotting histograms of embedding and convolution weights')
     histograms(embeddings, convs, save_loc)
 
-    # Plots word-wise predictions.
     print('Computing word-wise predictions for sample sentences')
     get_word_predictions(model, num_sentences, dataset, save_loc)
 
-    # Computes excitiations.
     print('Computing convolutional excitation for sample sentences')
     get_excitations(model, num_sentences, dataset, save_loc)
 
-    # Get some examples.
     print('Converting JSON to text examples')
     make_examples(save_loc)
 
