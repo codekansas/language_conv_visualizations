@@ -24,7 +24,7 @@ def build_model(vocab_size: int,
     )(i)
 
     x = ks.layers.Conv1D(
-        num_convolutions, 3,
+        num_convolutions, conv_length,
         kernel_initializer=ks.initializers.RandomNormal(stddev=0.05),
         padding='same',
         use_bias=False,
