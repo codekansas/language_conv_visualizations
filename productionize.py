@@ -10,7 +10,15 @@ import utils
 from utils import Dataset
 
 
+def get_save_dir(*path):
+    save_dir = os.path.join(*path)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    return save_dir
+
+
 def save_model_tfjs(model: ks.models.Model, save_loc: str) -> None:
+    save_dir = get_save_dir(save_loc, 'model')
     word_pred_model = ks.models.Model(
         inputs=model.inputs,
         outputs=[model.get_layer('word_preds').output],
@@ -18,7 +26,7 @@ def save_model_tfjs(model: ks.models.Model, save_loc: str) -> None:
     word_pred_model.compile(optimizer='sgd', loss='mse')
     tfjs.converters.save_keras_model(
         word_pred_model,
-        save_loc,
+        save_dir,
     )
 
 

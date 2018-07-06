@@ -23,24 +23,21 @@ def build_model(vocab_size: int,
         name='embeddings',
     )(i)
 
-    # The convolutional layer is regularized to prevent all of the Convolutions
-    # fitting to the same pattern.
     x = ks.layers.Conv1D(
         num_convolutions, 3,
         kernel_initializer=ks.initializers.RandomNormal(stddev=0.05),
         padding='same',
         use_bias=False,
-        activation='relu',
         name='convs',
     )(x)
-    x = ks.layers.BatchNormalization()(x)
+    # x = ks.layers.BatchNormalization()(x)
 
     x = ks.layers.Conv1D(
         1, 1,
-        activation='sigmoid',
         name='word_preds',
     )(x)
     x = ks.layers.GlobalAveragePooling1D()(x)
+    x = ks.layers.Activation('sigmoid')(x)
     return ks.models.Model(inputs=[i], outputs=[x])
 
 

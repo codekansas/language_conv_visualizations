@@ -4,7 +4,6 @@ import json
 import os
 from typing import List, Tuple, Any
 
-import numpy as np
 from numpy import ndarray as Matrix  # For typing
 from tensorflow import keras as ks
 
@@ -32,8 +31,12 @@ class Dataset(object):
         self.sequence_len = sequence_len
         self.vocab_size = vocab_size
 
-    def decode(self, x: List[int]) -> List[str]:
-        return [self.index_to_word.get(i - 3, 'X') for i in x[1:]]
+    def decode(self, x: List[int], keep_first: bool=False) -> List[str]:
+        x = [i for i in x if i != 0]
+        return [
+            self.index_to_word.get(i - 3, 'X')
+            for i in (x if keep_first else x[1:])
+        ]
 
     def encode(self, x: str) -> List[int]:
         return [1] + [

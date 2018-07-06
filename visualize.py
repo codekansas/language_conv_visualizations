@@ -4,7 +4,6 @@ import argparse
 import os
 from typing import Tuple, List
 
-from annoy import AnnoyIndex
 from matplotlib import pyplot as plt
 import numpy as np
 from sklearn.decomposition import PCA
@@ -17,9 +16,11 @@ from utils import Dataset, Matrix  # Project-specific types
 def get_ordered_sentences(words: List[str],
                           scores: List[float],
                           conv_len: int) -> List[Tuple[str, float]]:
-    assert len(scores) + conv_len - 1 == len(words)
     sentence_score_pairs = [
-        (' '.join(words[i:i + conv_len]), scores[i])
+        (
+            ' '.join(words[max(i - conv_len // 2, 0):i + (conv_len + 1) // 2]),
+            scores[i],
+        )
         for i in range(len(scores))
     ]
     sentence_score_pairs.sort(key=lambda x: x[1])  # Sorts by scores.
@@ -116,22 +117,6 @@ def get_excitations(model: ks.models.Model,
     }, save_loc, 'excitations.json')
 
 
-def get_index(embeddings: Matrix,
-              num_trees: int,
-              cache: bool) -> AnnoyIndex:
-    embedding_size = np.shape(embeddings)[1]
-    fname = 'embeddings.ann'
-    index = AnnoyIndex(embedding_size)
-    if cache and os.path.exists(fname):
-        index.load(fname)
-        return index
-    for i, vec in enumerate(embeddings):
-        index.add_item(i, vec)
-    index.build(num_trees)
-    index.save(fname)
-    return index
-
-
 def dimensionality_reduction(embeddings: Matrix,
                              convs: Matrix,
                              save_loc: str) -> None:
@@ -145,7 +130,7 @@ def dimensionality_reduction(embeddings: Matrix,
     plt.legend()
     plt.xlabel('First principle component')
     plt.ylabel('Second principle component')
-    plt.savefig(os.path.join(save_loc, 'dimensionaliy_reduction.png'))
+    plt.savefig(os.path.join(save_loc, 'dimensionality_reduction.png'))
     plt.close()
 
 
@@ -171,24 +156,28 @@ def conv_knn(embeddings: Matrix,
              num_nns: int,
              save_loc: str,
              cache_index: bool) -> None:
-    convs = convs.transpose(0, 2, 1)
-    index = get_index(embeddings, num_trees, cache_index)
+    index = np.dot(convs.transpose(0, 2, 1), embeddings.transpose(1, 0))
+    sorted_idxs = np.argsort(index, axis=-1)
 
     def parse_vec(seq_id, filter_id):
-        v = convs[seq_id, filter_id, :]
-        idxs, dists = index.get_nns_by_vector(
-            v, num_nns, include_distances=True)
-        words = dataset.decode(idxs)
+        v = convs[seq_id, :, filter_id]
+        idxs = sorted_idxs[seq_id, filter_id][-num_nns:]
+        words = dataset.decode(idxs, keep_first=True)
         return {
             'words': words,
-            'distances': dists,
             'norm': float(np.sqrt(np.sum(v ** 2))),
         }
 
     utils.save_json([
         [parse_vec(i, j) for i in range(convs.shape[0])]
-        for j in range(convs.shape[1])
+        for j in range(convs.shape[2])
     ], save_loc, 'knns.json')
+
+
+def get_examples(dataset: Dataset, save_loc: str, num_examples: int) -> None:
+    utils.save_json([
+        ' '.join(dataset.decode(s)) for s in dataset.x_test[:num_examples]
+    ], save_loc, 'examples.json')
 
 
 def visualize(num_nns: int,
@@ -230,12 +219,15 @@ def visualize(num_nns: int,
     print('Converting JSON to text examples')
     make_examples(save_loc)
 
+    print('Getting some examples')
+    get_examples(dataset, save_loc, 10)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Visualize trained network')
     parser.add_argument('-t', '--num-trees', type=int, default=100,
                         help='Number of trees to use in KNN model')
-    parser.add_argument('-n', '--num-neighbors', type=int, default=10,
+    parser.add_argument('-n', '--num-neighbors', type=int, default=5,
                         help='Number of neighbors to return in KNN search')
     parser.add_argument('-o', '--save-loc', type=str, default='outputs/',
                         help='Where to save the visualization files')
