@@ -7,22 +7,48 @@ from tensorflow import keras as ks
 import utils
 
 
-def build_model(vocab_size: int,
-                embed_size: int,
-                num_convolutions: int,
-                conv_length: int) -> ks.models.Model:
+def build_language_model(vocab_size: int,
+                         embed_size: int,
+                         num_convolutions: int,
+                         conv_length: int) -> ks.models.Model:
     i = ks.layers.Input(shape=(None,))
-
-    # The initializer is set so that the relative magnitude of the embeddings
-    # are close to the relative magnitude of the convolutioanl filters, which
-    # greatly improves training speed.
     x = ks.layers.Embedding(
         vocab_size,
         embed_size,
         embeddings_initializer=ks.initializers.RandomNormal(stddev=0.05),
         name='embeddings',
     )(i)
+    x = ks.layers.Conv1D(
+        num_convolutions, conv_length,
+        kernel_initializer=ks.initializers.RandomNormal(stddev=0.05),
+        use_bias=False,
+        name='convs',
+    )(x)
+    x = ks.layers.Conv1D(
+        vocab_size, 1,
+        activation='softmax',
+        name='word_preds',
+    )(x)
+    model = ks.models.Model(inputs=[i], outputs=[x])
+    model.compile(
+        optimizer='adam',
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy'],
+    )
+    return model
 
+
+def build_prediction_model(vocab_size: int,
+                           embed_size: int,
+                           num_convolutions: int,
+                           conv_length: int) -> ks.models.Model:
+    i = ks.layers.Input(shape=(None,))
+    x = ks.layers.Embedding(
+        vocab_size,
+        embed_size,
+        embeddings_initializer=ks.initializers.RandomNormal(stddev=0.05),
+        name='embeddings',
+    )(i)
     x = ks.layers.Conv1D(
         num_convolutions, conv_length,
         kernel_initializer=ks.initializers.RandomNormal(stddev=0.05),
@@ -30,15 +56,19 @@ def build_model(vocab_size: int,
         use_bias=False,
         name='convs',
     )(x)
-    # x = ks.layers.BatchNormalization()(x)
-
     x = ks.layers.Conv1D(
         1, 1,
         name='word_preds',
     )(x)
     x = ks.layers.GlobalAveragePooling1D()(x)
     x = ks.layers.Activation('sigmoid')(x)
-    return ks.models.Model(inputs=[i], outputs=[x])
+    model = ks.models.Model(inputs=[i], outputs=[x])
+    model.compile(
+        optimizer='adam',
+        loss='binary_crossentropy',
+        metrics=['accuracy'],
+    )
+    return model
 
 
 def train(embed_size: int,
@@ -46,21 +76,25 @@ def train(embed_size: int,
           epochs: int,
           num_convolutions: int,
           conv_length: int,
-          model_save_loc: str) -> None:
-    dataset = utils.Dataset()
+          model_save_loc: str,
+          train_language_model: bool) -> None:
 
-    model = build_model(
-        vocab_size=dataset.vocab_size,
-        embed_size=embed_size,
-        num_convolutions=num_convolutions,
-        conv_length=conv_length,
-    )
-
-    model.compile(
-        optimizer='adam',
-        loss='binary_crossentropy',
-        metrics=['accuracy'],
-    )
+    if train_language_model:
+        dataset = utils.LanguageModelDataset(conv_length=conv_length)
+        model = build_language_model(
+            vocab_size=dataset.vocab_size,
+            embed_size=embed_size,
+            num_convolutions=num_convolutions,
+            conv_length=conv_length,
+        )
+    else:
+        dataset = utils.PredictionDataset()
+        model = build_prediction_model(
+            vocab_size=dataset.vocab_size,
+            embed_size=embed_size,
+            num_convolutions=num_convolutions,
+            conv_length=conv_length,
+        )
 
     model.save(model_save_loc)
 
@@ -94,6 +128,9 @@ if __name__ == '__main__':
                         help='The length of the convolutional filters')
     parser.add_argument('-m', '--model-save-loc', type=str, default='model.h5',
                         help='Where to save the model during training')
+    parser.add_argument('--train-language-model', default=False,
+                        action='store_true',
+                        help='If set, trains a language model')
     args = parser.parse_args()
 
     train(
@@ -103,4 +140,5 @@ if __name__ == '__main__':
         num_convolutions=args.num_convolutions,
         conv_length=args.conv_length,
         model_save_loc=args.model_save_loc,
+        train_language_model=args.train_language_model,
     )

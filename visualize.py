@@ -27,42 +27,10 @@ def get_ordered_sentences(words: List[str],
     return sentence_score_pairs
 
 
-def make_examples(save_loc: str) -> None:
-    word_preds = utils.load_json(save_loc, 'word_predictions.json')
-    conv_len = word_preds['conv_len']
-    word_preds = word_preds['predictions']
-    with open(os.path.join(save_loc, 'word_predictions_show.txt'), 'w') as f:
-        for example in word_preds:
-            ordered_sentences = get_ordered_sentences(
-                example['words'],
-                example['preds'],
-                conv_len,
-            )
-            f.write('\n'.join('{}: {}'.format(*g)
-                    for g in ordered_sentences))
-            f.write('\n\n')
-
-    excitations = utils.load_json(save_loc, 'excitations.json')
-    conv_len = excitations['conv_len']
-    excitations = excitations['activations']
-    with open(os.path.join(save_loc, 'excitations_show.txt'), 'w') as f:
-        for example in excitations:
-            for i in range(3):
-                ordered_sentences = get_ordered_sentences(
-                    example['words'],
-                    example['preds'][i],
-                    conv_len,
-                )
-                f.write('Layer {}\n'.format(i))
-                f.write('\n'.join('{}: {}'.format(*g)
-                        for g in ordered_sentences))
-                f.write('\n\n')
-
-
-def get_word_predictions(model: ks.models.Model,
-                         num_sentences: int,
-                         dataset: Dataset,
-                         save_loc: str) -> None:
+def get_binary_word_predictions(model: ks.models.Model,
+                                num_sentences: int,
+                                dataset: Dataset,
+                                save_loc: str) -> None:
     conv_len = model.get_layer('convs').get_weights()[0].shape[0]
     word_pred_model = ks.models.Model(
         inputs=model.inputs,
@@ -79,13 +47,25 @@ def get_word_predictions(model: ks.models.Model,
             'preds': [float(i) for i in preds],
         }
 
-    utils.save_json({
+    word_preds = {
         'conv_len': conv_len,
         'predictions': [
             get_preds(i, p)
             for i, p in zip(dataset.x_train[:num_sentences], preds)
         ],
-    }, save_loc, 'word_predictions.json')
+    }
+    utils.save_json(word_preds, save_loc, 'word_predictions.json')
+
+    with open(os.path.join(save_loc, 'word_predictions_show.txt'), 'w') as f:
+        for example in word_preds['predictions']:
+            ordered_sentences = get_ordered_sentences(
+                example['words'],
+                example['preds'],
+                conv_len,
+            )
+            f.write('\n'.join('{}: {}'.format(*g)
+                    for g in ordered_sentences))
+            f.write('\n\n')
 
 
 def get_excitations(model: ks.models.Model,
@@ -108,13 +88,27 @@ def get_excitations(model: ks.models.Model,
             'preds': [[float(j) for j in i] for i in preds.T],
         }
 
-    utils.save_json({
+    excitations = {
         'conv_len': conv_len,
         'activations': [
             get_preds(i, p)
             for i, p in zip(dataset.x_train[:num_sentences], preds)
         ],
-    }, save_loc, 'excitations.json')
+    }
+    utils.save_json(excitations, save_loc, 'excitations.json')
+
+    with open(os.path.join(save_loc, 'excitations_show.txt'), 'w') as f:
+        for example in excitations['activations']:
+            for i in range(3):
+                ordered_sentences = get_ordered_sentences(
+                    example['words'],
+                    example['preds'][i],
+                    conv_len,
+                )
+                f.write('Layer {}\n'.format(i))
+                f.write('\n'.join('{}: {}'.format(*g)
+                        for g in ordered_sentences))
+                f.write('\n\n')
 
 
 def dimensionality_reduction(embeddings: Matrix,
@@ -185,7 +179,8 @@ def visualize(num_nns: int,
               save_loc: str,
               cache_index: bool,
               num_sentences: int,
-              model_save_loc: str) -> None:
+              model_save_loc: str,
+              visualize_language_model: bool) -> None:
     if not os.path.exists(model_save_loc):
         raise RuntimeError('No such trained model exists: "{}". Run the '
                            'training script first!'.format(model_save_loc))
@@ -193,12 +188,15 @@ def visualize(num_nns: int,
     if not os.path.exists(save_loc):
         os.makedirs(save_loc)
 
-    dataset = Dataset()
-
     model = ks.models.load_model(model_save_loc)
 
     embeddings = model.get_layer('embeddings').get_weights()[0]
     convs = model.get_layer('convs').get_weights()[0]
+
+    if visualize_language_model:
+        dataset = utils.LanguageModelDataset(conv_length=convs.shape[0])
+    else:
+        dataset = utils.PredictionDataset()
 
     print('Computing KNNs to convolutions')
     conv_knn(embeddings, convs, dataset, num_trees,
@@ -210,14 +208,12 @@ def visualize(num_nns: int,
     print('Plotting histograms of embedding and convolution weights')
     histograms(embeddings, convs, save_loc)
 
-    print('Computing word-wise predictions for sample sentences')
-    get_word_predictions(model, num_sentences, dataset, save_loc)
+    if not visualize_language_model:
+        print('Computing word-wise predictions for sample sentences')
+        get_binary_word_predictions(model, num_sentences, dataset, save_loc)
 
     print('Computing convolutional excitation for sample sentences')
     get_excitations(model, num_sentences, dataset, save_loc)
-
-    print('Converting JSON to text examples')
-    make_examples(save_loc)
 
     print('Getting some examples')
     get_examples(dataset, save_loc, 10)
@@ -238,6 +234,9 @@ if __name__ == '__main__':
                         help='Number of example sentences to visualize')
     parser.add_argument('-m', '--model-save-loc', type=str, default='model.h5',
                         help='Where the trained model is saved')
+    parser.add_argument('--visualize-language-model', default=False,
+                        action='store_true',
+                        help='If set, does language model visualizations')
     args = parser.parse_args()
 
     visualize(
@@ -247,4 +246,5 @@ if __name__ == '__main__':
         cache_index=not args.no_cache_index,
         num_sentences=args.num_sentences,
         model_save_loc=args.model_save_loc,
+        visualize_language_model=args.visualize_language_model,
     )
