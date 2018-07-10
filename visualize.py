@@ -179,8 +179,7 @@ def visualize(num_nns: int,
               save_loc: str,
               cache_index: bool,
               num_sentences: int,
-              model_save_loc: str,
-              visualize_language_model: bool) -> None:
+              model_save_loc: str) -> None:
     if not os.path.exists(model_save_loc):
         raise RuntimeError('No such trained model exists: "{}". Run the '
                            'training script first!'.format(model_save_loc))
@@ -192,11 +191,12 @@ def visualize(num_nns: int,
 
     embeddings = model.get_layer('embeddings').get_weights()[0]
     convs = model.get_layer('convs').get_weights()[0]
+    is_binary = model.get_layer('word_preds').get_weights()[0].shape[-1] == 1
 
-    if visualize_language_model:
-        dataset = utils.LanguageModelDataset(conv_length=convs.shape[0])
-    else:
+    if is_binary:
         dataset = utils.PredictionDataset()
+    else:
+        dataset = utils.LanguageModelDataset(conv_length=convs.shape[0])
 
     print('Computing KNNs to convolutions')
     conv_knn(embeddings, convs, dataset, num_trees,
@@ -208,7 +208,7 @@ def visualize(num_nns: int,
     print('Plotting histograms of embedding and convolution weights')
     histograms(embeddings, convs, save_loc)
 
-    if not visualize_language_model:
+    if is_binary:
         print('Computing word-wise predictions for sample sentences')
         get_binary_word_predictions(model, num_sentences, dataset, save_loc)
 
@@ -223,7 +223,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Visualize trained network')
     parser.add_argument('-t', '--num-trees', type=int, default=100,
                         help='Number of trees to use in KNN model')
-    parser.add_argument('-n', '--num-neighbors', type=int, default=5,
+    parser.add_argument('-n', '--num-neighbors', type=int, default=20,
                         help='Number of neighbors to return in KNN search')
     parser.add_argument('-o', '--save-loc', type=str, default='outputs/',
                         help='Where to save the visualization files')
@@ -234,9 +234,6 @@ if __name__ == '__main__':
                         help='Number of example sentences to visualize')
     parser.add_argument('-m', '--model-save-loc', type=str, default='model.h5',
                         help='Where the trained model is saved')
-    parser.add_argument('--visualize-language-model', default=False,
-                        action='store_true',
-                        help='If set, does language model visualizations')
     args = parser.parse_args()
 
     visualize(
@@ -246,5 +243,4 @@ if __name__ == '__main__':
         cache_index=not args.no_cache_index,
         num_sentences=args.num_sentences,
         model_save_loc=args.model_save_loc,
-        visualize_language_model=args.visualize_language_model,
     )
