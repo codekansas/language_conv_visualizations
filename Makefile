@@ -1,10 +1,12 @@
 # Helps batch some common operations.
 
+TENSORFLOW_PIP_VERSION=tensorflow-gpu
+
 LANG_ENV_NAME=lang.env
 PROD_ENV_NAME=prod.env
 
 _lang_env: ${LANG_ENV_NAME}/bin/activate
-	. ${LANG_ENV_NAME}/bin/activate; pip install tensorflow-gpu sklearn matplotlib h5py scipy
+	. ${LANG_ENV_NAME}/bin/activate; pip install $(TENSORFLOW_PIP_VERSION) sklearn matplotlib h5py scipy
 
 _prod_env: ${PROD_ENV_NAME}/bin/activate
 	. ${PROD_ENV_NAME}/bin/activate; pip install tensorflow tensorflowjs
