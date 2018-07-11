@@ -96,6 +96,7 @@ def train(embed_size: int,
             conv_length=conv_length,
         )
 
+    model.summary()
     model.save(model_save_loc)
 
     model.fit(

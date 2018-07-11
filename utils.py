@@ -100,7 +100,7 @@ class LanguageModelDataset(Dataset):
         x, y = zip(*[
             (idx[i:i + s], idx[i + c:i + s + 1])
             for idx in idxs
-            if len(idx) > self.sequence_len
+            if len(idx) > s
             for i in range(0, len(idx) - s - 1, s)
         ])
         x, y = np.asarray(x), np.expand_dims(np.asarray(y), -1)
